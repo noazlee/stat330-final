@@ -4,7 +4,7 @@ output: html_document
 ---
 
 ```{r}
-library(dplyr)
+library(tidyverse)
 library(ggplot2)
 library(lme4)
 ```
@@ -46,6 +46,15 @@ nba <- nba %>%
     is_home = factor(ifelse(HTM==TEAM_ABBREVIATION, 1, 0))
   )
 ```
+
+Adding time left (s) column in quarter:
+```{r}
+nba <- nba %>%
+  mutate(
+    TIME_QTR = MINUTES_REMAINING * 60 + SECONDS_REMAINING
+  )
+```
+
 
 
 
@@ -229,6 +238,18 @@ nba <- nba %>%
 table(nba$SHOT_CATEGORY)
 ```
 
+```{r}
+nba <- nba %>%
+  mutate(SHOT_CATEGORY = fct_relevel(SHOT_CATEGORY, "Jump Shot", "Fadeaway", "Hook Shot", "Dunk", "Layup"))
+```
+
+Get rid of dunk/layup?
+```{r}
+nba<-nba %>%
+  filter(SHOT_CATEGORY != "Dunk" &  SHOT_CATEGORY != "Layup")
+```
+
+
 
 
 ```{r}
@@ -250,13 +271,20 @@ RQs:
 do physical characteristics (height, weight, position) moderate the distance-accuracy tradeoff?
 are taller players more accurate on mid-range vs. close shots compared to guards?
 
-- game level: does shot-making probability change as a function of time remaining (period × minutes/seconds remaining)? do players shoot worse in high-leverage moments (4th quarter, close games, playoffs)? is there a "fatigue effect" — do later periods show lower FG% after controlling for shot type and distance?
+- game level: does shot-making probability change as a function of time remaining (period × minutes/seconds remaining)? do players shoot worse in high-leverage moments (4th quarter, playoffs)? is there a "fatigue effect" — do later periods show lower FG% after controlling for shot type and distance?
 
 - team level: does team quality (TEAM_W_PCT, TEAM_PLUS_MINUS) predict individual shot-making above and beyond player ability?
 do players on better teams take higher-quality shots (shorter distance, better zones)?
   
 - shot level: shot  do certain ACTION_TYPEs (pullup jumpers vs. catch-and-shoot) have different success rates after controlling for distance?
 are shots from "better" zones (corner 3 vs. above the break) more predictive of makes than raw distance alone?
+
+```{r message=FALSE, cache=TRUE}
+library(GGally)
+nba %>%
+  select(SHOT_DISTANCE, SHOT_MADE_FLAG, AGE, GP, MIN, PLUS_MINUS, HEIGHT, WEIGHT) %>%
+  ggpairs()
+```
 
 
 ## ICC
@@ -269,7 +297,6 @@ nba_scale <- nba %>%
 
 
 could look for some resource online on ICC for logistic
-
 ```{r}
 nba_glmer_base_0 <- glmer(factor(SHOT_MADE_FLAG) ~ 1 + (1|PLAYER_ID), family=binomial, data=nba) 
 summary(nba_glmer_base_0)
@@ -310,9 +337,23 @@ threshholdICC
 
 
 ## Big model
+
+```{r}
+nba <- nba %>%
+  group_by(PLAYER_ID) %>%
+  arrange(-GAME_TYPE) %>%
+  mutate(
+    REG_PTS = first(PTS),
+    REG_PM = first(PLUS_MINUS),
+    REG_FG_PCT = first(FG_PCT)
+  ) %>%
+  ungroup()
+```
+
+
 ```{r}
 nba_glmer <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY * PERIOD + SHOT_CATEGORY*GAME_TYPE + SHOT_CATEGORY*SHOT_DISTANCE + 
-                     AGE + HEIGHT + WEIGHT + POSITION*SHOT_DISTANCE + TEAM_W + (SHOT_DISTANCE|PLAYER_ID) + (1|GAME_ID), 
+                     AGE + HEIGHT + WEIGHT + POSITION*SHOT_DISTANCE + is_home + REG_PTS + REG_PM  + TIME_QTR+ (SHOT_DISTANCE|PLAYER_ID) + (1|GAME_ID), 
                         family = binomial, data = nba, 
                         nAGQ = 0,
                         control = glmerControl(
@@ -323,7 +364,71 @@ summary(nba_glmer)
 ```
 
 
+### Check conditions
+
+#### Pearson/Deviance Residuals
+
+```{r}
+nba_aug1 <- augment(nba_glmer, type.predict= "link", type.residuals = c("pearson", "deviance")) |>
+  mutate(.resp.resid = resid(nba_glmer, type= "response"))
+```
+
+```{r}
+nba_aug1 |>
+  ggplot(aes(x = .fitted, y = .resp.resid)) +
+  geom_point() +
+  geom_smooth()
+```
+
+Looks pretty good
+```{r}
+nba_aug1 %>%
+  mutate(bin = ntile(SHOT_DISTANCE, 500)) %>%
+  group_by(bin) %>%
+  summarize(
+    mean_distance = mean(SHOT_DISTANCE),
+    mean_resid = mean(.resp.resid)
+  ) %>%
+  ggplot(aes(x=mean_distance, y=mean_resid)) +
+  geom_point()
+```
 
 
+```{r}
+nba_aug1 %>%
+  ggplot(aes(x=.fitted,  y=.cooksd)) +
+  geom_point()
+```
 
+```{r}
+# one real cooks d
+nba_aug1 %>%
+  filter(.cooksd > 0.1)
+```
+Anthony Davis shot distance error!
+```{r}
+nba %>%
+  filter(PLAYER_ID == 203076 & GAME_ID == 22400111 & SHOT_DISTANCE == 23) 
+
+nba <- nba %>%
+  filter(PLAYER_ID != 203076 | GAME_ID != 22400111 | SHOT_DISTANCE != 23) 
+```
+
+
+```{r}
+library(car)
+vif(nba_glmer)
+```
+
+Position looks like a problem - likely correlated with height
+Shot_category also a problem, likely layups, dunks close to basket - jumpshots differ.
+
+Stuff looks good - moving on for now.
+
+### Inference
+
+Nick from here
+- Get rid of weight, is_home, 
+- first check POSITION
+- Check if gameid RE needed
 
