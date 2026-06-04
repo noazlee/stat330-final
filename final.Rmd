@@ -41,7 +41,10 @@ nba <- nba %>%
 
 Add home team column:
 ```{r}
-
+nba <- nba %>%
+  mutate(
+    is_home = factor(ifelse(HTM==TEAM_ABBREVIATION, 1, 0))
+  )
 ```
 
 
