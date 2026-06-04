@@ -1,0 +1,326 @@
+---
+title: "final"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lme4)
+```
+
+
+```{r}
+nba <- read.csv("nba_shots_combined.csv", stringsAsFactors = TRUE)
+head(nba)
+```
+
+## Transformations
+
+```{r}
+nba <- nba %>%
+  mutate(
+    GAME_DATE = as.Date(as.character(GAME_DATE), format = "%Y%m%d"),
+    HEIGHT = as.integer(str_split_fixed(HEIGHT, "-", 2)[,1]) * 12 +
+                     as.integer(str_split_fixed(HEIGHT, "-", 2)[,2]),
+    
+  ) %>%
+  select(
+    -c(PLAYER_NAME_y, SEASON, TEAM_TEAM_NAME, GRID_TYPE)
+  ) 
+```
+
+Lets get rid of players with less than 20 shots
+```{r}
+nba <- nba %>%
+  group_by(PLAYER_ID) %>%
+  filter(n() >= 20) %>%
+  ungroup()
+```
+
+
+Add home team column:
+```{r}
+
+```
+
+
+
+## Base EDA
+
+Does not include all the games - API limited how much I could take at once - about half of the regular season games, all the  playoff games
+```{r}
+nba %>%
+  summarize(
+    num_players = n_distinct(PLAYER_ID),
+    num_teams = n_distinct(TEAM_ID),
+    num_games = n_distinct(GAME_ID),
+    num_position = n_distinct(POSITION),
+  )
+```
+
+Missing games:
+```{r}
+nba %>%
+  filter(GAME_TYPE == "Regular Season") %>%
+  group_by(GAME_DATE) %>%
+  summarize(n_games = n_distinct(GAME_ID)) %>%
+  arrange(GAME_DATE)
+```
+
+Mainly have start of the season games - cut off started in mid january.
+
+How many shots per player? by team?
+```{r}
+nba %>%
+  group_by(TEAM_ABBREVIATION, POSITION) %>%
+  summarize(
+    games_played = n_distinct(GAME_ID),
+    total_shots = n(),
+    avg_shots= total_shots / games_played,
+    fg_pct = mean(SHOT_MADE_FLAG),
+    avg_distance = mean(SHOT_DISTANCE),
+    three_pt_rate = mean(SHOT_TYPE == "3PT Field Goal"),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(TEAM_ABBREVIATION))
+```
+
+```{r}
+# most shots is SGA
+nba %>%
+  group_by(PLAYER_ID) %>%
+  summarize(
+    total_shots = n(),
+    shots_made = sum(SHOT_MADE_FLAG),
+    pct = shots_made / total_shots
+  ) %>%
+  summarize(
+    avg_shots = mean(total_shots),
+    avg_made = mean(shots_made),
+    avg_pct = avg_made/avg_shots
+  )
+```
+
+
+
+```{r}
+# most shots is SGA
+nba %>%
+  group_by(PLAYER_ID) %>%
+  summarize(
+    total_shots = n(),
+    shots_made = sum(SHOT_MADE_FLAG),
+    pct = shots_made / total_shots
+  ) %>%
+  ggplot(aes(x=total_shots, y=shots_made)) +
+  geom_point()
+```
+
+Looking at shot percentage against distance (binned) - looks decently linear
+```{r}
+nba %>%
+  mutate(bin = ntile(SHOT_DISTANCE, 500)) %>%
+  group_by(bin) %>%
+  summarize(
+    mean_distance = mean(SHOT_DISTANCE),
+    prob = mean(SHOT_MADE_FLAG),
+    odds = prob/(1-prob),
+    logodds = log(odds)
+  ) %>%
+  ggplot(aes(x=mean_distance, y=logodds)) +
+  geom_point()
+```
+
+Shot makes (filtered by jumpshot)
+```{r}
+nba %>%
+  filter(ACTION_TYPE == "Jump Shot" | ACTION_TYPE == "Pullup Jump shot") %>%
+  mutate(bin = ntile(SHOT_DISTANCE, 500)) %>%
+  group_by(bin) %>%
+  summarize(
+    mean_distance = mean(SHOT_DISTANCE),
+    prob = mean(SHOT_MADE_FLAG),
+    odds = prob/(1-prob),
+    logodds = log(odds)
+  ) %>%
+  ggplot(aes(x=mean_distance, y=logodds)) +
+  geom_point()
+```
+
+
+```{r}
+nba %>%
+  filter(ACTION_TYPE == "Jump Shot" | ACTION_TYPE == "Pullup Jump shot") %>%
+  group_by(GAME_ID) %>%
+  summarize(
+    mean_distance = mean(SHOT_DISTANCE),
+    prob = mean(SHOT_MADE_FLAG),
+    odds = prob/(1-prob),
+    logodds = log(odds)
+  ) %>%
+  ggplot(aes(x=mean_distance, y=logodds)) +
+  geom_point()
+```
+
+```{r}
+nba %>%
+  filter(ACTION_TYPE == "Jump Shot" | ACTION_TYPE == "Pullup Jump shot") %>%
+  group_by(GAME_ID) %>%
+  summarize(
+    mean_distance = mean(SHOT_DISTANCE),
+    prob = mean(SHOT_MADE_FLAG),
+    odds = prob/(1-prob),
+    logodds = log(odds)
+  ) %>%
+  ggplot(aes(x=logodds)) +
+  geom_histogram()
+```
+
+
+
+
+
+Looking at ACTION_TYPE shots
+```{r}
+table(nba$ACTION_TYPE) 
+```
+
+```{r}
+nba <- nba %>%
+  mutate(SHOT_CATEGORY = case_when(
+    ACTION_TYPE %in% c(
+      "Alley Oop Layup shot", "Cutting Finger Roll Layup Shot", "Cutting Layup Shot",
+      "Driving Finger Roll Layup Shot", "Driving Layup Shot", "Driving Reverse Layup Shot",
+      "Finger Roll Layup Shot", "Layup Shot", "Putback Layup Shot", "Reverse Layup Shot",
+      "Running Alley Oop Layup Shot", "Running Finger Roll Layup Shot", "Running Layup Shot",
+      "Running Reverse Layup Shot", "Tip Layup Shot"
+    ) ~ "Layup",
+    
+    ACTION_TYPE %in% c(
+      "Alley Oop Dunk Shot", "Cutting Dunk Shot", "Driving Dunk Shot", "Driving Reverse Dunk Shot",
+      "Dunk Shot", "Putback Dunk Shot", "Reverse Dunk Shot", "Running Alley Oop Dunk Shot",
+      "Running Dunk Shot", "Running Reverse Dunk Shot", "Tip Dunk Shot"
+    ) ~ "Dunk",
+    
+    ACTION_TYPE %in% c(
+      "Driving Bank Hook Shot", "Driving Hook Shot", "Hook Bank Shot", "Hook Shot",
+      "Turnaround Bank Hook Shot", "Turnaround Hook Shot"
+    ) ~ "Hook Shot",
+    
+    ACTION_TYPE %in% c(
+      "Fadeaway Bank shot", "Fadeaway Jump Shot", "Turnaround Fadeaway Bank Jump Shot",
+      "Turnaround Fadeaway shot"
+    ) ~ "Fadeaway",
+    
+    ACTION_TYPE %in% c(
+      "Driving Floating Bank Jump Shot", "Driving Floating Jump Shot", "Floating Jump shot",
+      "Jump Bank Shot", "Jump Shot", "Pullup Jump shot", "Running Jump Shot",
+      "Running Pull-Up Jump Shot", "Step Back Bank Jump Shot", "Step Back Jump shot",
+      "Turnaround Bank shot", "Turnaround Jump Shot"
+    ) ~ "Jump Shot",
+    
+    TRUE ~ "Other"
+  ))
+
+table(nba$SHOT_CATEGORY)
+```
+
+
+
+```{r}
+ggplot(nba, aes(x=factor(SHOT_ATTEMPTED_FLAG), fill = factor(SHOT_MADE_FLAG))) +
+  facet_wrap(~factor(SHOT_CATEGORY)) +
+  geom_bar(position = "fill") +
+  coord_flip()
+```
+
+## Questions
+- How to check if clustering makes sense? - is 0 values ok?
+- What to do about ACTION_TYPE - so many 
+- Shots associated with 'winning basketball'
+- 
+
+
+RQs:
+- player level: does shot difficulty (distance, shot type, shot zone) predict made shots after accounting for player-level shooting ability?
+do physical characteristics (height, weight, position) moderate the distance-accuracy tradeoff?
+are taller players more accurate on mid-range vs. close shots compared to guards?
+
+- game level: does shot-making probability change as a function of time remaining (period × minutes/seconds remaining)? do players shoot worse in high-leverage moments (4th quarter, close games, playoffs)? is there a "fatigue effect" — do later periods show lower FG% after controlling for shot type and distance?
+
+- team level: does team quality (TEAM_W_PCT, TEAM_PLUS_MINUS) predict individual shot-making above and beyond player ability?
+do players on better teams take higher-quality shots (shorter distance, better zones)?
+  
+- shot level: shot  do certain ACTION_TYPEs (pullup jumpers vs. catch-and-shoot) have different success rates after controlling for distance?
+are shots from "better" zones (corner 3 vs. above the break) more predictive of makes than raw distance alone?
+
+
+## ICC
+
+scaling data? maybe help w optimization?
+```{r}
+nba_scale <- nba %>%
+  mutate(across(where(is.numeric), ~as.numeric(scale(.))))
+```
+
+
+could look for some resource online on ICC for logistic
+
+```{r}
+nba_glmer_base_0 <- glmer(factor(SHOT_MADE_FLAG) ~ 1 + (1|PLAYER_ID), family=binomial, data=nba) 
+summary(nba_glmer_base_0)
+```
+
+
+```{r}
+nba_glmer_base <- glmer(factor(SHOT_MADE_FLAG) ~ 1 + (1|PLAYER_ID) + (1|GAME_ID), 
+                        family = binomial, data = nba, 
+                        nAGQ = 0,
+                        control = glmerControl(
+                          optCtrl = list(maxfun = 1e6),
+                          tol = 1e-3
+                        ))
+
+summary(nba_glmer_base)
+```
+
+#### ICC Latent Threshold Approach:
+(https://online.ucpress.edu/collabra/article/10/1/94263/200117/Approaches-for-Quantifying-the-ICC-in-Multilevel)
+
+Player:
+```{r}
+tau20 <- VarCorr(nba_glmer_base)$PLAYER_ID[1]
+sigma2 <- pi^2/3
+threshholdICC = tau20 / (tau20 + sigma2)
+threshholdICC
+```
+
+Game:
+```{r}
+tau20 <- VarCorr(nba_glmer_base)$GAME_ID[1]
+sigma2 <- pi^2/3
+threshholdICC = tau20 / (tau20 + sigma2)
+threshholdICC
+```
+
+
+
+## Big model
+```{r}
+nba_glmer <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY * PERIOD + SHOT_CATEGORY*GAME_TYPE + SHOT_CATEGORY*SHOT_DISTANCE + 
+                     AGE + HEIGHT + WEIGHT + POSITION*SHOT_DISTANCE + TEAM_W + (SHOT_DISTANCE|PLAYER_ID) + (1|GAME_ID), 
+                        family = binomial, data = nba, 
+                        nAGQ = 0,
+                        control = glmerControl(
+                          optCtrl = list(maxfun = 1e6),
+                          tol = 1e-3
+                        ))
+summary(nba_glmer)
+```
+
+
+
+
+
+
