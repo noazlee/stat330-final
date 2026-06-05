@@ -7,6 +7,7 @@ output: html_document
 library(tidyverse)
 library(ggplot2)
 library(lme4)
+library(broom)
 ```
 
 
@@ -428,7 +429,14 @@ Stuff looks good - moving on for now.
 ### Inference
 
 Nick from here
-- Get rid of weight, is_home, 
+- Get rid of weight, is_home
+
+  -   Weight and is_home notably not worth adding. Period variable is slightly above 0.05 at 0.07, but its interactions with shot type definitely not worth including. Hookshot interestingly isn't that significant at 0.12, but its interaction with shot distance definitely is, which makes sense as hook shots are a difficult shot to make especially at further distances.
+  
+  Worth noting that SHOTDISTANCE does seem to be a somewhat suspect variable considering some reported shot distances don't seem to align with actual shots based on video highlights of games. 
+  
+  Position seems worth adding in some cases. What are differences between flex roles ie guard-fwd vs fwd-guard or especially c-fwd vs fwd-c bc one is significant and one is not.
+
 - first check POSITION
 - Check if gameid RE needed
 
