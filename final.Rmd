@@ -56,6 +56,16 @@ nba <- nba %>%
   )
 ```
 
+```{r}
+nba <- nba %>%
+  mutate(
+    POSITION = if_else(POSITION=="Forward-Center", "Forward", POSITION),
+    POSITION = if_else(POSITION=="Center-Forward", "Center", POSITION),
+    POSITION = if_else(POSITION=="Forward-Guard", "Forward", POSITION),
+    POSITION = if_else(POSITION=="Guard-Forward", "Guard", POSITION),
+  )
+```
+
 
 ## Missing data?
 
@@ -326,7 +336,8 @@ table(nba$SHOT_CATEGORY)
 
 ```{r}
 nba <- nba %>%
-  mutate(SHOT_CATEGORY = fct_relevel(SHOT_CATEGORY, "Jump Shot", "Fadeaway", "Hook Shot", "Dunk", "Layup"))
+  mutate(SHOT_CATEGORY = fct_relevel(SHOT_CATEGORY, "Jump Shot", "Fadeaway", "Hook Shot", "Dunk", "Layup"),
+         GAME_TYPE = fct_relevel(GAME_TYPE, "Regular Season", "Playoffs"))
 ```
 
 Get rid of dunk/layup?
@@ -334,8 +345,6 @@ Get rid of dunk/layup?
 nba<-nba %>%
   filter(SHOT_CATEGORY != "Dunk" &  SHOT_CATEGORY != "Layup")
 ```
-
-
 
 
 ```{r}
@@ -446,10 +455,21 @@ nba <- nba %>%
   ungroup()
 ```
 
+#### Center
+```{r}
+nba <- nba %>% 
+  mutate(
+    C_AGE = AGE-mean(AGE),
+    C_HEIGHT = HEIGHT-mean(HEIGHT),
+    C_WEIGHT = WEIGHT-mean(WEIGHT),
+    C_REG_PTS = REG_PTS-mean(REG_PTS)
+  )
+```
+
 
 ```{r}
 nba_glmer <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY * PERIOD + SHOT_CATEGORY*GAME_TYPE + SHOT_CATEGORY*SHOT_DISTANCE + 
-                     AGE + HEIGHT + WEIGHT + POSITION*SHOT_DISTANCE + is_home + REG_PTS + REG_PM  + TIME_QTR+ (SHOT_DISTANCE|PLAYER_ID) + (1|GAME_ID), 
+                     C_AGE + C_HEIGHT + C_WEIGHT + POSITION*SHOT_DISTANCE + is_home + C_REG_PTS + REG_PM  + TIME_QTR+ (SHOT_DISTANCE|PLAYER_ID) + (1|GAME_ID), 
                         family = binomial, data = nba, 
                         nAGQ = 0,
                         control = glmerControl(
@@ -532,16 +552,115 @@ Nick from here
   
 #### Walds results
 ```{r}
-
+summary(nba_glmer)
 ```
-
+From Wald's - remove is_home, weight, 
   
   Worth noting that SHOTDISTANCE does seem to be a somewhat suspect variable considering some reported shot distances don't seem to align with actual shots based on video highlights of games. 
   
   Position seems worth adding in some cases. What are differences between flex roles ie guard-fwd vs fwd-guard or especially c-fwd vs fwd-c bc one is significant and one is not.
 
+```{r}
+nba_glmer <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY * PERIOD + SHOT_CATEGORY*GAME_TYPE + SHOT_CATEGORY*SHOT_DISTANCE + 
+                     C_AGE + C_HEIGHT + POSITION*SHOT_DISTANCE + C_REG_PTS + REG_PM  + TIME_QTR+ (SHOT_DISTANCE|PLAYER_ID) + (1|GAME_ID), 
+                        family = binomial, data = nba, 
+                        nAGQ = 0,
+                        control = glmerControl(
+                          optCtrl = list(maxfun = 1e6),
+                          tol = 1e-3
+                        ))
+summary(nba_glmer)
+```
+
+
 - first check POSITION
+
+#### LRT FE test on PERIOD
+```{r}
+nba_glmer_red <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY*GAME_TYPE + SHOT_CATEGORY*SHOT_DISTANCE + C_AGE + C_HEIGHT + POSITION*SHOT_DISTANCE + C_REG_PTS + REG_PM  + TIME_QTR+ (SHOT_DISTANCE|PLAYER_ID) + (1|GAME_ID), 
+                        family = binomial, data = nba, 
+                        nAGQ = 0,
+                        control = glmerControl(
+                          optCtrl = list(maxfun = 1e6),
+                          tol = 1e-3
+                        ))
+summary(nba_glmer_red)
+```
+
+```{r}
+lrt_obs <- as.numeric(2*(logLik(nba_glmer, REML = FALSE) - logLik(nba_glmer_red, REML = FALSE)))
+lrt_obs
+```
+
+```{r}
+1-pchisq(lrt_obs, df=3)
+```
+High p val - fail to reject null - so we proceed with smaller model.
+
+```{r}
+nba_glmer <- nba_glmer_red
+```
+
+```{r}
+summary(nba_glmer)
+```
+
+
 - Check if gameid RE needed
+```{r}
+summary(nba_glmer)
+```
+
+
+```{r}
+nba_glmer_red <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY*GAME_TYPE + SHOT_CATEGORY*SHOT_DISTANCE + C_AGE + C_HEIGHT + POSITION*SHOT_DISTANCE + C_REG_PTS + REG_PM  + TIME_QTR+ (SHOT_DISTANCE|PLAYER_ID), 
+                        family = binomial, data = nba, 
+                        nAGQ = 0,
+                        control = glmerControl(
+                          optCtrl = list(maxfun = 1e6),
+                          tol = 1e-3
+                        ))
+summary(nba_glmer_red)
+```
+
+#### Boundary LRT on GAME_ID RE
+
+Errenous result. Will just proceed without it.
+```{r}
+lrt_obs <- as.numeric(2*(logLik(nba_glmer) - logLik(nba_glmer_red)))
+lrt_obs
+```
+
+```{r}
+nba_glmer <- nba_glmer_red
+```
+
+```{r}
+summary(nba_glmer)
+```
+
+#### LRT on random slope
+
+```{r}
+nba_glmer_red <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY*GAME_TYPE + SHOT_CATEGORY*SHOT_DISTANCE + C_AGE + C_HEIGHT + POSITION*SHOT_DISTANCE + C_REG_PTS + REG_PM  + TIME_QTR+ (1|PLAYER_ID), 
+                        family = binomial, data = nba, 
+                        nAGQ = 0,
+                        control = glmerControl(
+                          optCtrl = list(maxfun = 1e6),
+                          tol = 1e-3
+                        ))
+summary(nba_glmer_red)
+```
+```{r}
+lrt_obs <- as.numeric(2*(logLik(nba_glmer) - logLik(nba_glmer_red)))
+lrt_obs
+```
+
+```{r}
+0.5*(1-pchisq(lrt_obs, df=2))+0.5*(1-pchisq(lrt_obs, df=1))
+```
+
+Low p value - reject null, the random effect for slope is statistically significant.
 
 
 
