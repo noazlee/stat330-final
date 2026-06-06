@@ -57,6 +57,25 @@ nba <- nba %>%
 ```
 
 
+## Missing data?
+
+```{r}
+library(mice)
+nba %>%
+  md.pattern(rotate.names=TRUE)
+```
+
+```{r}
+nba %>%
+  filter(is.na(WEIGHT)) %>%
+  distinct(PLAYER_ID, PLAYER_NAME_x)
+```
+
+```{r}
+nba <- nba %>%
+  filter(!is.na(WEIGHT))
+```
+
 
 
 ## Base EDA
@@ -161,6 +180,32 @@ nba %>%
   geom_point()
 ```
 
+```{r}
+nba %>%
+  group_by(SHOT_CATEGORY) %>%
+  mutate(bin = ntile(SHOT_DISTANCE, 100)) %>%
+  group_by(SHOT_CATEGORY, bin) %>%
+  summarize(
+    mean_distance = mean(SHOT_DISTANCE),
+    prob = mean(SHOT_MADE_FLAG),
+    odds = prob / (1 - prob),
+    logodds = log(odds),
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = mean_distance, y = logodds, color = SHOT_CATEGORY)) +
+  geom_point() +
+  labs(
+    x = "Mean shot distance (ft)",
+    y = "Empirical log-odds of make",
+    color = "Shot category"
+  ) +
+  geom_smooth(method="lm", se=FALSE) +
+  theme_bw()
+```
+
+Different slopes model appropriate here
+
+
 
 ```{r}
 nba %>%
@@ -190,7 +235,47 @@ nba %>%
   geom_histogram()
 ```
 
+#### Spaghetti plot of shot made against distance by player
 
+```{r}
+set.seed(662026)
+
+sample <- nba %>%
+  distinct(PLAYER_ID) %>%
+  slice_sample(n = 50) %>%
+  pull(PLAYER_ID)
+
+nba %>%
+  filter(PLAYER_ID %in% sample) %>%
+  group_by(PLAYER_ID) %>%
+  mutate(bin = ntile(SHOT_DISTANCE, 20)) %>%
+  group_by(PLAYER_ID, bin) %>%
+  summarize(
+    SHOT_DISTANCE = mean(SHOT_DISTANCE),
+    p = mean(as.numeric(SHOT_MADE_FLAG)),
+    odds = p/(1-p),
+    logodds = log(odds)
+  ) %>%
+  ggplot(aes(x = SHOT_DISTANCE, y = logodds, group = PLAYER_ID)) +
+  geom_point(
+    alpha = 0.6,
+    size = 0.7,
+    color = "gray"
+  ) +
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    linewidth = 0.5,
+    color = "red"
+  ) +
+  labs(
+    x = "Mean shot distance (ft)",
+    y = "Log odds (shot made)",
+    title = "Spaghetti Plot of 50 Random NBA players logodds against binned shot distance"
+  ) +
+  theme_bw()
+```
+Different intercepts definitely, maybe differnet slopes
 
 
 
@@ -254,10 +339,20 @@ nba<-nba %>%
 
 
 ```{r}
-ggplot(nba, aes(x=factor(SHOT_ATTEMPTED_FLAG), fill = factor(SHOT_MADE_FLAG))) +
-  facet_wrap(~factor(SHOT_CATEGORY)) +
-  geom_bar(position = "fill") +
-  coord_flip()
+nba %>%
+  ggplot(aes(x = GAME_TYPE, fill = factor(SHOT_MADE_FLAG))) +
+    facet_wrap(~ SHOT_CATEGORY) +
+    geom_bar(position = "fill") +
+    coord_flip() +
+    scale_fill_discrete(
+      name = "Shot Outcome",
+      labels = c("Missed", "Made")
+    ) +
+    labs(
+      x = NULL,
+      y = "Proportion of shots",
+      title = "Shot outcome by category and game type"
+    )
 ```
 
 ## Questions
@@ -400,6 +495,8 @@ nba_aug1 %>%
   ggplot(aes(x=.fitted,  y=.cooksd)) +
   geom_point()
 ```
+
+#### Outliers
 
 ```{r}
 # one real cooks d
