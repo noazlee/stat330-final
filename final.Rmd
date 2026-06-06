@@ -1,6 +1,8 @@
 ---
 title: "final"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r}
@@ -9,7 +11,6 @@ library(ggplot2)
 library(lme4)
 library(broom)
 ```
-
 
 ```{r}
 nba <- read.csv("nba_shots_combined.csv", stringsAsFactors = TRUE)
@@ -32,6 +33,7 @@ nba <- nba %>%
 ```
 
 Lets get rid of players with less than 20 shots
+
 ```{r}
 nba <- nba %>%
   group_by(PLAYER_ID) %>%
@@ -39,8 +41,8 @@ nba <- nba %>%
   ungroup()
 ```
 
-
 Add home team column:
+
 ```{r}
 nba <- nba %>%
   mutate(
@@ -49,6 +51,7 @@ nba <- nba %>%
 ```
 
 Adding time left (s) column in quarter:
+
 ```{r}
 nba <- nba %>%
   mutate(
@@ -65,7 +68,6 @@ nba <- nba %>%
     POSITION = if_else(POSITION=="Guard-Forward", "Guard", POSITION),
   )
 ```
-
 
 ## Missing data?
 
@@ -86,11 +88,10 @@ nba <- nba %>%
   filter(!is.na(WEIGHT))
 ```
 
-
-
 ## Base EDA
 
-Does not include all the games - API limited how much I could take at once - about half of the regular season games, all the  playoff games
+Does not include all the games - API limited how much I could take at once - about half of the regular season games, all the playoff games
+
 ```{r}
 nba %>%
   summarize(
@@ -102,6 +103,7 @@ nba %>%
 ```
 
 Missing games:
+
 ```{r}
 nba %>%
   filter(GAME_TYPE == "Regular Season") %>%
@@ -113,6 +115,7 @@ nba %>%
 Mainly have start of the season games - cut off started in mid january.
 
 How many shots per player? by team?
+
 ```{r}
 nba %>%
   group_by(TEAM_ABBREVIATION, POSITION) %>%
@@ -144,8 +147,6 @@ nba %>%
   )
 ```
 
-
-
 ```{r}
 # most shots is SGA
 nba %>%
@@ -160,6 +161,7 @@ nba %>%
 ```
 
 Looking at shot percentage against distance (binned) - looks decently linear
+
 ```{r}
 nba %>%
   mutate(bin = ntile(SHOT_DISTANCE, 500)) %>%
@@ -175,6 +177,7 @@ nba %>%
 ```
 
 Shot makes (filtered by jumpshot)
+
 ```{r}
 nba %>%
   filter(ACTION_TYPE == "Jump Shot" | ACTION_TYPE == "Pullup Jump shot") %>%
@@ -190,11 +193,7 @@ nba %>%
   geom_point()
 ```
 
-
-
 Different slopes model appropriate here
-
-
 
 ```{r}
 nba %>%
@@ -264,11 +263,11 @@ nba %>%
   ) +
   theme_bw()
 ```
+
 Different intercepts definitely, maybe differnet slopes
 
-
-
 Looking at ACTION_TYPE shots
+
 ```{r}
 table(nba$ACTION_TYPE) 
 ```
@@ -343,11 +342,11 @@ nba %>%
 ```
 
 Get rid of dunk/layup?
+
 ```{r}
 nba<-nba %>%
   filter(SHOT_CATEGORY != "Dunk" &  SHOT_CATEGORY != "Layup")
 ```
-
 
 ```{r}
 nba %>%
@@ -367,24 +366,19 @@ nba %>%
 ```
 
 ## Questions
+
 - How to check if clustering makes sense? - is 0 values ok?
-- What to do about ACTION_TYPE - so many 
+- What to do about ACTION_TYPE - so many
 - Shots associated with 'winning basketball'
 - 
 
-
-RQs:
-- player level: does shot difficulty (distance, shot type, shot zone) predict made shots after accounting for player-level shooting ability?
-do physical characteristics (height, weight, position) moderate the distance-accuracy tradeoff?
-are taller players more accurate on mid-range vs. close shots compared to guards?
+RQs: - player level: does shot difficulty (distance, shot type, shot zone) predict made shots after accounting for player-level shooting ability? do physical characteristics (height, weight, position) moderate the distance-accuracy tradeoff? are taller players more accurate on mid-range vs. close shots compared to guards?
 
 - game level: does shot-making probability change as a function of time remaining (period × minutes/seconds remaining)? do players shoot worse in high-leverage moments (4th quarter, playoffs)? is there a "fatigue effect" — do later periods show lower FG% after controlling for shot type and distance?
 
-- team level: does team quality (TEAM_W_PCT, TEAM_PLUS_MINUS) predict individual shot-making above and beyond player ability?
-do players on better teams take higher-quality shots (shorter distance, better zones)?
-  
-- shot level: shot  do certain ACTION_TYPEs (pullup jumpers vs. catch-and-shoot) have different success rates after controlling for distance?
-are shots from "better" zones (corner 3 vs. above the break) more predictive of makes than raw distance alone?
+- team level: does team quality (TEAM_W_PCT, TEAM_PLUS_MINUS) predict individual shot-making above and beyond player ability? do players on better teams take higher-quality shots (shorter distance, better zones)?
+
+- shot level: shot do certain ACTION_TYPEs (pullup jumpers vs. catch-and-shoot) have different success rates after controlling for distance? are shots from "better" zones (corner 3 vs. above the break) more predictive of makes than raw distance alone?
 
 ```{r message=FALSE, cache=TRUE}
 library(GGally)
@@ -393,22 +387,21 @@ nba %>%
   ggpairs()
 ```
 
-
 ## ICC
 
 scaling data? maybe help w optimization?
+
 ```{r}
 nba_scale <- nba %>%
   mutate(across(where(is.numeric), ~as.numeric(scale(.))))
 ```
 
-
 could look for some resource online on ICC for logistic
+
 ```{r}
 nba_glmer_base_0 <- glmer(factor(SHOT_MADE_FLAG) ~ 1 + (1|PLAYER_ID), family=binomial, data=nba) 
 summary(nba_glmer_base_0)
 ```
-
 
 ```{r}
 nba_glmer_base <- glmer(factor(SHOT_MADE_FLAG) ~ 1 + (1|PLAYER_ID) + (1|GAME_ID), 
@@ -423,9 +416,11 @@ summary(nba_glmer_base)
 ```
 
 #### ICC Latent Threshold Approach:
-(https://online.ucpress.edu/collabra/article/10/1/94263/200117/Approaches-for-Quantifying-the-ICC-in-Multilevel)
+
+(<https://online.ucpress.edu/collabra/article/10/1/94263/200117/Approaches-for-Quantifying-the-ICC-in-Multilevel>)
 
 Player:
+
 ```{r}
 tau20 <- VarCorr(nba_glmer_base)$PLAYER_ID[1]
 sigma2 <- pi^2/3
@@ -434,14 +429,13 @@ threshholdICC
 ```
 
 Game:
+
 ```{r}
 tau20 <- VarCorr(nba_glmer_base)$GAME_ID[1]
 sigma2 <- pi^2/3
 threshholdICC = tau20 / (tau20 + sigma2)
 threshholdICC
 ```
-
-
 
 ## Big model
 
@@ -458,6 +452,7 @@ nba <- nba %>%
 ```
 
 #### Center
+
 ```{r}
 nba <- nba %>% 
   mutate(
@@ -467,7 +462,6 @@ nba <- nba %>%
     C_REG_PTS = REG_PTS-mean(REG_PTS)
   )
 ```
-
 
 ```{r}
 nba_glmer <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY * PERIOD + SHOT_CATEGORY*GAME_TYPE + SHOT_CATEGORY*SHOT_DISTANCE + 
@@ -481,12 +475,32 @@ nba_glmer <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY * PERIOD + SHOT_CATEGO
 summary(nba_glmer)
 ```
 
+### Model structure:
+
+For shot $k$, player $j$ and game $i$:
+
+#### Level 1 (Shot level):
+
+$$\begin{aligned}
+\log\left(\frac{\pi_{ijk}}{1-\pi_{ijk}}\right) = a_{ij} + b_{ij} \cdot \text{shot}\_\text{distance}_{ijk} + c_{ij} \text{shot}\_\text{category}_{ijk} + \gamma_1 \text{period}_{ijk} \\+ \ \gamma_2 \  \text{shot}\_\text{category}_{ijk}\cdot\text{period}_{ijk}  + \gamma_3 \text{shot}\_\text{distance}_{ijk} \cdot \text{shot}\_\text{category}_{ijk} + \gamma_4 \text{time}\_\text{qtr}_{ijk}
+\end{aligned}$$
+
+#### Level 2 (Player, Game level):
+
+$$\begin{aligned}
+a_{ij} =\alpha_0 + \alpha_1 \text{cage}_{j} + \alpha_2\text{cheight}_{j} + \alpha_3\text{cweight}_{j} + \alpha_4\text{position}_{j}\\ + \ \alpha_5 \ \text{regpts}_{j} +\alpha_6\text{regpm}_j +\alpha_7\text{playoff}_{i} + \alpha_8\text{home}_{i} + u_j + \tilde{u}_i  \\
+b_{ij} = \beta_0 + \beta_1 \text{position}_{j} + v_{j} \\
+c_{ij} = \theta_0 + \theta_1 \text{playoff}_i\\
+\begin{bmatrix}u_j\\v_j\end{bmatrix}\overset{iid}{\sim}N_2\left(\begin{bmatrix}0\\0\end{bmatrix}, \begin{bmatrix}\sigma_{u}^2 & \rho_{uv}\sigma_u\sigma_v \\ . & \sigma_v^2\end{bmatrix}\right) \\
+\tilde{u}_i \overset{iid}{\sim} N(0, \sigma_{\tilde{u}}^2)
+\end{aligned}$$
 
 ### Check conditions
 
 #### Pearson/Deviance Residuals
 
 ```{r}
+library(broom.mixed)
 nba_aug1 <- augment(nba_glmer, type.predict= "link", type.residuals = c("pearson", "deviance")) |>
   mutate(.resp.resid = resid(nba_glmer, type= "response"))
 ```
@@ -495,10 +509,13 @@ nba_aug1 <- augment(nba_glmer, type.predict= "link", type.residuals = c("pearson
 nba_aug1 |>
   ggplot(aes(x = .fitted, y = .resp.resid)) +
   geom_point() +
-  geom_smooth()
+  geom_smooth() +
+  theme_bw() +
+  labs(title="Pearson Residual Plot on Initial Model")
 ```
 
 Looks pretty good
+
 ```{r}
 nba_aug1 %>%
   mutate(bin = ntile(SHOT_DISTANCE, 500)) %>%
@@ -508,14 +525,17 @@ nba_aug1 %>%
     mean_resid = mean(.resp.resid)
   ) %>%
   ggplot(aes(x=mean_distance, y=mean_resid)) +
-  geom_point()
+  geom_point() +
+  theme_bw() +
+  labs(title="Residual by Binned Distance on Initial Model")
 ```
-
 
 ```{r}
 nba_aug1 %>%
   ggplot(aes(x=.fitted,  y=.cooksd)) +
-  geom_point()
+  geom_point() +
+  theme_bw() +
+  labs(title="Cooks Distance Plot on Initial Model")
 ```
 
 #### Outliers
@@ -525,7 +545,9 @@ nba_aug1 %>%
 nba_aug1 %>%
   filter(.cooksd > 0.1)
 ```
+
 Anthony Davis shot distance error!
+
 ```{r}
 nba %>%
   filter(PLAYER_ID == 203076 & GAME_ID == 22400111 & SHOT_DISTANCE == 23) 
@@ -534,33 +556,32 @@ nba <- nba %>%
   filter(PLAYER_ID != 203076 | GAME_ID != 22400111 | SHOT_DISTANCE != 23) 
 ```
 
-
 ```{r}
 library(car)
 vif(nba_glmer)
 ```
 
-Position looks like a problem - likely correlated with height
-Shot_category also a problem, likely layups, dunks close to basket - jumpshots differ.
+Position looks like a problem - likely correlated with height Shot_category also a problem, likely layups, dunks close to basket - jumpshots differ.
 
 Stuff looks good - moving on for now.
 
 ### Inference
 
-Nick from here
-- Get rid of weight, is_home
+Nick from here - Get rid of weight, is_home
 
-  -   Weight and is_home notably not worth adding. Period variable is slightly above 0.05 at 0.07, but its interactions with shot type definitely not worth including. Hookshot interestingly isn't that significant at 0.12, but its interaction with shot distance definitely is, which makes sense as hook shots are a difficult shot to make especially at further distances.
-  
+- Weight and is_home notably not worth adding. Period variable is slightly above 0.05 at 0.07, but its interactions with shot type definitely not worth including. Hookshot interestingly isn't that significant at 0.12, but its interaction with shot distance definitely is, which makes sense as hook shots are a difficult shot to make especially at further distances.
+
 #### Walds results
+
 ```{r}
 summary(nba_glmer)
 ```
-From Wald's - remove is_home, weight, 
-  
-  Worth noting that SHOTDISTANCE does seem to be a somewhat suspect variable considering some reported shot distances don't seem to align with actual shots based on video highlights of games. 
-  
-  Position seems worth adding in some cases. What are differences between flex roles ie guard-fwd vs fwd-guard or especially c-fwd vs fwd-c bc one is significant and one is not.
+
+From Wald's - remove is_home, weight,
+
+Worth noting that SHOTDISTANCE does seem to be a somewhat suspect variable considering some reported shot distances don't seem to align with actual shots based on video highlights of games.
+
+Position seems worth adding in some cases. What are differences between flex roles ie guard-fwd vs fwd-guard or especially c-fwd vs fwd-c bc one is significant and one is not.
 
 ```{r}
 nba_glmer <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY * PERIOD + SHOT_CATEGORY*GAME_TYPE + SHOT_CATEGORY*SHOT_DISTANCE + 
@@ -574,10 +595,10 @@ nba_glmer <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY * PERIOD + SHOT_CATEGO
 summary(nba_glmer)
 ```
 
-
 - first check POSITION
 
 #### LRT FE test on PERIOD
+
 ```{r}
 nba_glmer_red <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY*GAME_TYPE + SHOT_CATEGORY*SHOT_DISTANCE + C_AGE + C_HEIGHT + POSITION*SHOT_DISTANCE + C_REG_PTS + REG_PM  + TIME_QTR+ (SHOT_DISTANCE|PLAYER_ID) + (1|GAME_ID), 
                         family = binomial, data = nba, 
@@ -597,6 +618,7 @@ lrt_obs
 ```{r}
 1-pchisq(lrt_obs, df=3)
 ```
+
 High p val - fail to reject null - so we proceed with smaller model.
 
 ```{r}
@@ -607,12 +629,11 @@ nba_glmer <- nba_glmer_red
 summary(nba_glmer)
 ```
 
-
 - Check if gameid RE needed
+
 ```{r}
 summary(nba_glmer)
 ```
-
 
 ```{r}
 nba_glmer_red <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY*GAME_TYPE + SHOT_CATEGORY*SHOT_DISTANCE + C_AGE + C_HEIGHT + POSITION*SHOT_DISTANCE + C_REG_PTS + REG_PM  + TIME_QTR+ (SHOT_DISTANCE|PLAYER_ID), 
@@ -628,6 +649,7 @@ summary(nba_glmer_red)
 #### Boundary LRT on GAME_ID RE
 
 Errenous result. Will just proceed without it.
+
 ```{r}
 lrt_obs <- as.numeric(2*(logLik(nba_glmer) - logLik(nba_glmer_red)))
 lrt_obs
@@ -653,6 +675,7 @@ nba_glmer_red <- glmer(factor(SHOT_MADE_FLAG) ~ SHOT_CATEGORY*GAME_TYPE + SHOT_C
                         ))
 summary(nba_glmer_red)
 ```
+
 ```{r}
 lrt_obs <- as.numeric(2*(logLik(nba_glmer) - logLik(nba_glmer_red)))
 lrt_obs
@@ -664,5 +687,36 @@ lrt_obs
 
 Low p value - reject null, the random effect for slope is statistically significant.
 
+## final model
 
+```{r}
+tidy(nba_glmer, conf.int = TRUE) %>%
+  mutate(across(where(is.numeric), \(x) round(x, 4)))
+```
 
+| Fixed Effect | Group | Estimate | Standard Error | 95% CI Low | 95% CI High |
+|------------|--------|-------------|-------------|-------------|-------------|
+| (Intercept) | Shot | 0.1486 | 0.0763 | -0.0010 | 0.2981 |
+| Fadeaway | Shot | -0.0333 | 0.0956 | -0.2208 | 0.1541 |
+| Hook Shot | Shot | 0.2870 | 0.0952 | 0.1004 | 0.4736 |
+| Shot Distance | Shot | -0.0310 | 0.0035 | -0.0378 | -0.0242 |
+| Time_qtr | Shot | 0.0002 | 0.0000 | 0.0001 | 0.0002 |
+| Playoffs | Game | -0.0745 | 0.0250 | -0.1234 | -0.0255 |
+| C_Age | Player | 0.0098 | 0.0022 | 0.0055 | 0.0141 |
+| C_Height | Player | -0.0118 | 0.0050 | -0.0216 | -0.0019 |
+| Forward | Player | -0.2369 | 0.0802 | -0.3941 | -0.0797 |
+| Guard | Player | -0.1865 | 0.0847 | -0.3524 | -0.0205 |
+| C_Reg_Pts | Player | 0.0075 | 0.0014 | 0.0048 | 0.0103 |
+| Reg_PM | Player | 0.0115 | 0.0026 | 0.0064 | 0.0166 |
+| Fadeaway:Playoffs |  | -0.1226 | 0.0884 | -0.2958 | 0.0506 |
+| Hook Shot:Playoffs |  | 0.3684 | 0.1321 | 0.1094 | 0.6273 |
+| Fadeaway:Shot Distance |  | -0.0122 | 0.0074 | -0.0268 | 0.0023 |
+| Hook Shot: Shot Distance |  | -0.0529 | 0.0145 | -0.0813 | -0.0244 |
+| Forward: Shot Distance |  | 0.0095 | 0.0038 | 0.0019 | 0.0170 |
+| Guard: Shot Distance |  | 0.0069 | 0.0037 | -0.0005 | 0.0142 |
+
+| Random Effect                  | Estimate (Variance) |
+|--------------------------------|---------------------|
+| Intercept (Player)             | 0.2402              |
+| Shot Distance (Player)         | 0.0098              |
+| Corr(Intercept, Shot Distance) | -0.9409             |
