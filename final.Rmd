@@ -190,28 +190,7 @@ nba %>%
   geom_point()
 ```
 
-```{r}
-nba %>%
-  group_by(SHOT_CATEGORY) %>%
-  mutate(bin = ntile(SHOT_DISTANCE, 100)) %>%
-  group_by(SHOT_CATEGORY, bin) %>%
-  summarize(
-    mean_distance = mean(SHOT_DISTANCE),
-    prob = mean(SHOT_MADE_FLAG),
-    odds = prob / (1 - prob),
-    logodds = log(odds),
-    .groups = "drop"
-  ) %>%
-  ggplot(aes(x = mean_distance, y = logodds, color = SHOT_CATEGORY)) +
-  geom_point() +
-  labs(
-    x = "Mean shot distance (ft)",
-    y = "Empirical log-odds of make",
-    color = "Shot category"
-  ) +
-  geom_smooth(method="lm", se=FALSE) +
-  theme_bw()
-```
+
 
 Different slopes model appropriate here
 
@@ -338,6 +317,29 @@ table(nba$SHOT_CATEGORY)
 nba <- nba %>%
   mutate(SHOT_CATEGORY = fct_relevel(SHOT_CATEGORY, "Jump Shot", "Fadeaway", "Hook Shot", "Dunk", "Layup"),
          GAME_TYPE = fct_relevel(GAME_TYPE, "Regular Season", "Playoffs"))
+```
+
+```{r}
+nba %>%
+  group_by(SHOT_CATEGORY) %>%
+  mutate(bin = ntile(SHOT_DISTANCE, 100)) %>%
+  group_by(SHOT_CATEGORY, bin) %>%
+  summarize(
+    mean_distance = mean(SHOT_DISTANCE),
+    prob = mean(SHOT_MADE_FLAG),
+    odds = prob / (1 - prob),
+    logodds = log(odds),
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = mean_distance, y = logodds, color = SHOT_CATEGORY)) +
+  geom_point() +
+  labs(
+    x = "Mean shot distance (ft)",
+    y = "Empirical log-odds of make",
+    color = "Shot category"
+  ) +
+  geom_smooth(method="lm", se=FALSE) +
+  theme_bw()
 ```
 
 Get rid of dunk/layup?
