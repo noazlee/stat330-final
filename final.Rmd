@@ -720,3 +720,44 @@ tidy(nba_glmer, conf.int = TRUE) %>%
 | Intercept (Player)             | 0.2402              |
 | Shot Distance (Player)         | 0.0098              |
 | Corr(Intercept, Shot Distance) | -0.9409             |
+
+
+#### How likely was Tyrese's Shot against New York?
+
+```{r}
+nba %>% filter(PLAYER_NAME_x=="Tyrese Haliburton")
+
+predict(nba_glmer, newdata = data.frame(
+  Fadeaway = 0,
+  SHOT_CATEGORY = "Jump Shot",
+  GAME_TYPE = "Playoffs",
+  SHOT_DISTANCE = 23,
+  C_AGE = 25 - mean(nba$AGE),
+  C_HEIGHT = 77 - mean(nba$HEIGHT), 
+  POSITION = "Guard",
+  C_REG_PTS = 18.6 - mean(nba$REG_PTS),
+  REG_PM = 3,
+  TIME_QTR = 0,
+  PLAYER_ID = 1630169
+), type = "response")
+```
+
+```{r}
+nba %>% filter(PLAYER_NAME_x=="Stephen Curry")
+
+predict(nba_glmer, newdata = data.frame(
+  Fadeaway = 0,
+  SHOT_CATEGORY = "Jump Shot",
+  GAME_TYPE = "Regular Season",
+  SHOT_DISTANCE = 24,
+  C_AGE = 37 - mean(nba$AGE),
+  C_HEIGHT = 74 - mean(nba$HEIGHT), 
+  POSITION = "Guard",
+  C_REG_PTS = 24.5 - mean(nba$REG_PTS),
+  REG_PM = 4.3,
+  TIME_QTR = 60,
+  PLAYER_ID = 201939
+), type = "response")
+```
+
+
